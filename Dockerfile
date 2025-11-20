@@ -1,5 +1,5 @@
-# Image size ~ 400MB
-FROM node:21-alpine3.18 as builder
+# Stage 1: Build
+FROM node:21-alpine3.18 AS builder
 
 WORKDIR /app
 
@@ -7,8 +7,6 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 ENV PNPM_HOME=/usr/local/bin
 
 COPY . .
-
-COPY package*.json *-lock.yaml ./
 
 RUN apk add --no-cache --virtual .gyp \
         python3 \
@@ -18,23 +16,33 @@ RUN apk add --no-cache --virtual .gyp \
     && pnpm install && pnpm run build \
     && apk del .gyp
 
-FROM node:21-alpine3.18 as deploy
+# Stage 2: Deploy
+FROM node:21-alpine3.18 AS deploy
 
 WORKDIR /app
 
-ARG PORT
-ENV PORT $PORT
-EXPOSE $PORT
+ENV NODE_ENV=production
+EXPOSE 8080
 
-COPY --from=builder /app/assets ./assets
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/*.json /app/*-lock.yaml ./
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/pnpm-lock.yaml ./
+COPY --from=builder /app/assets ./assets
 
-RUN corepack enable && corepack prepare pnpm@latest --activate 
-ENV PNPM_HOME=/usr/local/bin
 
-RUN npm cache clean --force && pnpm install --production --ignore-scripts \
-    && addgroup -g 1001 -S nodejs && adduser -S -u 1001 nodejs \
-    && rm -rf $PNPM_HOME/.npm $PNPM_HOME/.node-gyp
+# Crear usuario nodeuser y darle permisos a /app y logs
+# Crear usuario nodeuser y darle permisos a /app y logs
+RUN addgroup nodegroup \
+    && adduser -D -G nodegroup nodeuser \
+    && mkdir -p /app/logs \
+    && chown -R nodeuser:nodegroup /app
 
-CMD ["npm", "start"]
+
+# Activar pnpm e instalar solo dependencias de producción
+RUN corepack enable \
+    && corepack prepare pnpm@latest --activate \
+    && pnpm install --prod
+
+USER nodeuser
+
+CMD ["node", "dist/app.js"]
