@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { getHistory, addToHistory } from '../services/memory';
+import SheetManager from "src/services/sheetsService";
+
 
 dotenv.config();
 
@@ -47,11 +49,16 @@ export const deepSeekChat = async (userMessage: string, userId: string): Promise
 
     const aiReply = response.data.choices[0].message.content;
 
-    // Guardar en historial
+   // Guardar en memoria
     addToHistory(userId, "user", userMessage);
     addToHistory(userId, "assistant", aiReply);
 
-    return aiReply;
+// Guardar en Google Sheets
+  await SheetManager.saveMessageToUserSheet(userId, "user", userMessage);
+  await SheetManager.saveMessageToUserSheet(userId, "assistant", aiReply);
+
+
+return aiReply;
 
   } catch (error: any) {
     console.error('❌ Error al usar DeepSeek:', error.response?.data || error.message);
