@@ -9,82 +9,62 @@ export const fallbackDeepSeekFlow = addKeyword([''])
 
     const humanTriggers = [
       "agente", "asesor", "representante",
-      "humano", "persona", 
+      "humano", "persona",
       "quiero hablar con alguien",
       "hablar con alguien",
       "hablar con un agente",
     ];
 
-    // -------------------------------------------
     // 🚨 Usuario pide humano
-    // -------------------------------------------
-
-    
-
     if (humanTriggers.some(t => message.includes(t))) {
 
-  await state.update({ human: true });
+      await state.update({ human: true });
 
-  await flowDynamic([
-    "👌 ¡Perfecto!",
-    "Un asesor humano se pondrá en contacto contigo a la brevedad.",
-  ]);
+      await flowDynamic([
+        "👌 ¡Perfecto!",
+        "Un asesor humano se pondrá en contacto contigo a la brevedad.",
+      ]);
 
-  // 📌 Lista de agentes configurados en .env
-const rawAgents = process.env.HUMAN_AGENTS?.split(",") || [];
+      // 📌 Leer agentes desde .env
+      const rawAgents = process.env.HUMAN_AGENTS?.split(",") || [];
+      
+      if (rawAgents.length === 0) {
+        console.error("❌ No hay agentes configurados en HUMAN_AGENTS");
+        return;
+      }
 
+      // Crear mensaje que se enviará a cada agente
+      const alertMessage =
+        `🚨 *Nuevo cliente solicita un agente*\n\n` +
+        `👤 *Número:* ${ctx.from}\n` +
+        `💬 *Mensaje:* ${ctx.body}\n` +
+        `📅 *Fecha:* ${new Date().toLocaleString("es-AR")}`;
 
-if (rawAgents.length === 0) {
-  console.error("❌ No hay agentes configurados en HUMAN_AGENTS");
-  return;
-}
+      // 🔄 Enviar mensaje a cada agente
+      for (let agent of rawAgents) {
+        agent = agent.trim();
 
-for (const agent of rawAgents) {
-  const agentNumber = `whatsapp:+${agent}`;
+        try {
+          console.log("ENVIANDO MENSAJE A:", agent);
 
-  try {
-    console.log("ENVIANDO TEMPLATE A:", agentNumber);
+          await provider.sendText(agent, alertMessage);
 
-  await provider.sendTemplate(
-  agentNumber,
-  "client_needs_agent",
-  [
-    {
-      type: "body",
-      parameters: [
-        { type: "text", text: ctx.from },
-        { type: "text", text: ctx.body },
-        { type: "text", text: new Date().toLocaleString("es-AR") },
-      ]
-    }
-  ]
-);
+          console.log("✔ Notificación enviada a", agent);
 
+        } catch (e) {
+          console.error(`❌ Error enviando mensaje a ${agent}`, e);
+        }
+      }
 
-  } catch (e) {
-    console.error(`❌ Error enviando a ${agentNumber}`, e.response?.data || e);
-  }
-}
-
-  return;
-}
-
-
-    // -------------------------------------------
-    // 🙅‍♂️ Si está en modo humano, no responder
-    // -------------------------------------------
-    if (st.human) {
       return;
     }
 
-    // -------------------------------------------
+    // 🙅‍♂️ Si está en modo humano, no responder
+    if (st.human) return;
+
     // 🤖 Activar IA
-    // -------------------------------------------
     const respuesta = await deepSeekChat(ctx.body, ctx.from);
     await flowDynamic(respuesta);
 
     return;
   });
-
-
-
